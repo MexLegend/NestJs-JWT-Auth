@@ -8,21 +8,22 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthDto } from './dto';
-import { ITokenResponse } from './model';
-import { AuthGuard } from '@nestjs/passport';
-import { JwtAccessGuard } from './guard';
-import { JwtRefreshGuard } from './guard/jwt-refresh.guard';
-import { GetUser } from './decorator';
+import { ITokenResponse } from './models';
+import { JwtAccessGuard } from '../core/guards';
+import { JwtRefreshGuard } from '../core/guards/jwt-refresh.guard';
+import { GetUser, Public } from '../core/decorators';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly _authService: AuthService) {}
 
+  @Public()
   @Post('local/signup')
   signUpLocal(@Body() dto: AuthDto): Promise<ITokenResponse> {
     return this._authService.signUpLocal(dto);
   }
 
+  @Public()
   @Post('local/signin')
   @HttpCode(HttpStatus.OK)
   signInLocal(@Body() dto: AuthDto): Promise<ITokenResponse> {
@@ -32,14 +33,21 @@ export class AuthController {
   @UseGuards(JwtAccessGuard)
   @Post('signout')
   @HttpCode(HttpStatus.OK)
-  signOut(@GetUser('id') userId: string) {
+  signOut(@GetUser('sub') userId: string) {
     return this._authService.signOut(userId);
   }
 
+  @Public()
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refreshTokens() {
-    return this._authService.refreshTokens();
+  refreshTokens(
+    @GetUser('sub') userId: string,
+    @GetUser('rt') refreshToken: string,
+  ) {
+    return this._authService.refreshTokens({
+      userId,
+      refreshToken,
+    });
   }
 }

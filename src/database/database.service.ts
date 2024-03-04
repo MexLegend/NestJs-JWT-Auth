@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { ENVIRONMENT_VARIABLES } from 'src/core/model';
+import { ENVIRONMENT_VARIABLES } from 'src/core/constants';
 
 @Injectable()
 export class DatabaseService

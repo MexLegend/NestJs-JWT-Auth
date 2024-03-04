@@ -2,8 +2,8 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { DatabaseService } from 'src/database/database.service';
 import { hash, verify } from 'argon2';
 import { AuthDto } from './dto';
-import { ENVIRONMENT_VARIABLES } from 'src/core/model';
-import { IRefreshTokenPayload, ITokenPayload, ITokenResponse } from './model';
+import { ENVIRONMENT_VARIABLES } from 'src/core/constants';
+import { IRefreshTokenPayload, ITokenPayload, ITokenResponse } from './models';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -63,10 +63,10 @@ export class AuthService {
     if (!user) throw new ForbiddenException('Credentials Incorrect');
 
     // Compare password
-    const pwMatches = await verify(user.hash, dto.password);
+    const passwordMatches = await verify(user.hash, dto.password);
 
     // If password incorrect throw exception
-    if (!pwMatches) throw new ForbiddenException('Credentials Incorrect');
+    if (!passwordMatches) throw new ForbiddenException('Credentials Incorrect');
 
     // Get tokens
     const tokens = await this.getTokens({ sub: user.id, email: user.email });
@@ -91,21 +91,6 @@ export class AuthService {
       },
       data: {
         hashedRt: null,
-      },
-    });
-  }
-
-  async updateDBRefreshTokenHash(payload: IRefreshTokenPayload) {
-    // Generate refresh token hash
-    const hashedRefreshToken = await hash(payload.refreshToken);
-
-    // Update DB refresh token hash
-    await this._dbService.user.update({
-      where: {
-        id: payload.userId,
-      },
-      data: {
-        hashedRt: hashedRefreshToken,
       },
     });
   }
@@ -136,5 +121,51 @@ export class AuthService {
     };
   }
 
-  async refreshTokens() {}
+  async refreshTokens(payload: IRefreshTokenPayload) {
+    // Find user by id
+    const user = await this._dbService.user.findUnique({
+      where: {
+        id: payload.userId,
+      },
+    });
+
+    // If user does not exists throw exception
+    if (!user || !user.hashedRt) throw new ForbiddenException('Access Denied');
+
+    // Compare refresh token
+    const refreshTokenMatches = await verify(
+      user.hashedRt,
+      payload.refreshToken,
+    );
+
+    // If refresh token invalid throw exception
+    if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
+
+    // Get tokens
+    const tokens = await this.getTokens({ sub: user.id, email: user.email });
+
+    // Update DB refresh token hash
+    await this.updateDBRefreshTokenHash({
+      userId: user.id,
+      refreshToken: tokens.refresh_token,
+    });
+
+    // Return tokens
+    return tokens;
+  }
+
+  async updateDBRefreshTokenHash(payload: IRefreshTokenPayload) {
+    // Generate refresh token hash
+    const hashedRefreshToken = await hash(payload.refreshToken);
+
+    // Update DB refresh token hash
+    await this._dbService.user.update({
+      where: {
+        id: payload.userId,
+      },
+      data: {
+        hashedRt: hashedRefreshToken,
+      },
+    });
+  }
 }
